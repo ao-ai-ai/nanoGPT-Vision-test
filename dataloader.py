@@ -25,7 +25,7 @@ class DataLoader:
         # =========================================
 
         self.train_shard_paths = [
-            os.path.join(data_dir, f"/content/data/token_for_AIkenGPT/perfect_mixed_tokens_20b/perfect_mixed_{i:4d}_gpt2.npy") for i in range(1, 100)
+            os.path.join(data_dir, f"/content/data/token_for_AIkenGPT/perfect_mixed_tokens_20b/perfect_mixed_{i:04d}_gpt2.npy") for i in range(1, 100)
         ]
 
         self.val_shard_paths = [
