@@ -124,6 +124,12 @@ class Trainer:
             
             if step > 0 and step % self.config.checkpoint_save_frequency == 0:
               self.save_checkpoint(step)
+            　########## NEW ##########
+            　create_repo(repo_id=self.repo_id, private=False, exist_ok=True)
+              checkpoint_filename = f"checkpoint_{step:06d}.pt"
+              checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_filename)
+              upload_file(repo_id=self.repo_id, path_or_fileobj=checkpoint_path, path_in_repo=checkpoint_path)
+              ########## NEW ##########
 
             # Evaluate every evaluation_frequency steps.
             if step % self.config.evaluation_frequency == 0:
