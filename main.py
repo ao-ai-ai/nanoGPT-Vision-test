@@ -37,6 +37,14 @@ def main():
     checkpoint_dir = os.environ.get("CKPT_DIR", "./checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
+    from huggingface_hub import create_repo
+    repo_id = "aoUTlum/AIkenGPT-checkpoints-test" # TODO: FILL example: "HayatoHongo/EveryonesGPT-checkpoints"
+    create_repo(repo_id=repo_id, private=False, exist_ok=True)
+
+    import os
+    checkpoint_dir = "./checkpoints"
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
