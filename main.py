@@ -41,7 +41,7 @@ def main():
     repo_id = "aoUTlum/AIkenGPT-checkpoints-test" # TODO: FILL example: "HayatoHongo/EveryonesGPT-checkpoints"
     create_repo(repo_id=repo_id, private=False, exist_ok=True)
 
-    import os
+    #import os
     checkpoint_dir = "./checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     
