@@ -1,8 +1,8 @@
 from huggingface_hub import upload_folder, HfApi
 import os
 
-repo_id = "YOURNAME/YOUREPO" # "HayatoHongo/everyoneschat-checkpoints"
-local_dir = "/home/ubuntu/YOURFILESYSTEM/checkpoints"
+repo_id = "aoUTlum/AIkenGPT_checkpoints_test"
+local_dir = "/content/nanoGPT-Vision/checkpoints"
 
 # repo create (skip if already created)
 api = HfApi(token=os.environ["HF_TOKEN"])
