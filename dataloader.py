@@ -20,16 +20,16 @@ class DataLoader:
         self.config = config
         self.data_dir = data_dir
 
-        # =========================================
+#=========================================
         # shards (= paths to split data files)
         # =========================================
 
         self.train_shard_paths = [
-            os.path.join(data_dir, f"edufineweb_train_{i:06d}.npy") for i in range(1, 100)
+            os.path.join(data_dir, f"/content/data/token_for_AIkenGPT/perfect_mixed_tokens_20b/perfect_mixed_{i:4d}_gpt2.npy") for i in range(1, 100)
         ]
 
         self.val_shard_paths = [
-            os.path.join(data_dir, "edufineweb_val_000000.npy")
+            os.path.join(data_dir, "/content/data/token_for_AIkenGPT/perfect_mixed_tokens_20b/perfect_mixed_0600_gpt2.npy")
         ]
 
         # =========================================
