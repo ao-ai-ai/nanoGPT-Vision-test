@@ -1,29 +1,15 @@
 # main.py
-# torchrun --standalone --nproc_per_node=8 main.py
-# torchrun --standalone --nproc_per_node=1 main.py
 import os
 import torch
-import torch.distributed as dist
 
 from config import ModelConfig
 from dataloader import DataLoader
 from model import GPT
-from train import Trainer, cleanup_ddp
-
-def setup_ddp():
-    if dist.is_initialized():
-        return int(os.environ.get("LOCAL_RANK", 0))
-    dist.init_process_group(backend="nccl")
-    local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
-    return local_rank
+from train import Trainer
 
 
 def main():
     config = ModelConfig()
-
-    # DDP init (rank/world are determined here)
-    local_rank = setup_ddp()
 
     # (Optional) common settings for accuracy and speed
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -31,16 +17,12 @@ def main():
 
     # Model/optimization
     model = GPT(config=config)
-
-    ### NEW ###
-    model = model.to(local_rank)
+    device = torch.device(config.device_type if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    # Call torch.compile only once
     model = torch.compile(model)
-    model = torch.nn.parallel.DistributedDataParallel(
-        model,
-        device_ids=[local_rank],
-    )
-    ### NEW ###
 
+    # close to nanoGPT setting
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.max_learning_rate,
@@ -48,8 +30,8 @@ def main():
         weight_decay=0.1,
     )
 
-    # DataLoader (DDP is initialized, so dist.get_rank() is available)
-    data_dir = os.environ.get("DATA_DIR", "/home/ubuntu/YOURFILESYSTEM") # os.environ.get("DATA_DIR", "/home/ubuntu/virginia-filesystem")
+    # DataLoader
+    data_dir = os.environ.get("DATA_DIR", "/home/ubuntu/YOURFILESYSTEM") # ex: /home/ubuntu/virginia-filesystem
     data_loader = DataLoader(data_dir=data_dir, config=config)
 
     checkpoint_dir = os.environ.get("CKPT_DIR", "./checkpoints")
@@ -61,13 +43,9 @@ def main():
         data_loader=data_loader,
         config=config,
         checkpoint_dir=checkpoint_dir,
-        local_rank=local_rank,
     )
 
-    try:
-        trainer.train()
-    finally:
-        cleanup_ddp()
+    trainer.train()
 
 if __name__ == "__main__":
     main()
