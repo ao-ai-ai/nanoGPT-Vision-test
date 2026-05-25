@@ -31,7 +31,7 @@ def main():
     )
 
     # DataLoader
-    data_dir = os.environ.get("DATA_DIR", "/home/ubuntu/YOURFILESYSTEM") # ex: /home/ubuntu/virginia-filesystem
+    data_dir = os.environ.get("DATA_DIR", "/content/data") # ex: /home/ubuntu/virginia-filesystem
     data_loader = DataLoader(data_dir=data_dir, config=config)
 
     checkpoint_dir = os.environ.get("CKPT_DIR", "./checkpoints")
