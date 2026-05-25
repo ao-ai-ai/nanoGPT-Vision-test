@@ -4,12 +4,12 @@ from dataclasses import dataclass
 @dataclass
 class ModelConfig:
     # === training ===
-    # DDP automatically sets global batch size = batch_size * number of devices
-    batch_size: int = 32 # 16 is equivalent to about 25 GB VRAM usage. 
-    total_training_steps: int = 35_000
-    evaluation_frequency: int = 1000
-    checkpoint_save_frequency: int = 5_000
-    evaluation_loops: int = 5
+    # Single-device setup: global batch size == batch_size
+    batch_size: int = 48 # 16 is equivalent to about 25 GB VRAM usage. 
+    total_training_steps: int = 200_000
+    evaluation_frequency: int = 100
+    checkpoint_save_frequency: int = 10_000
+    evaluation_loops: int = 10
 
     # === sequence ===
     input_sequence_length: int = 1024
@@ -27,11 +27,12 @@ class ModelConfig:
     # The learning rate is VERY important. You can tune it, but that takes time, money, and a bit of your sanity.
     # The "best" value depends on the architecture, the batch size, global batch size and more.
     # In short: nobody truly knows the best learning rate for *your* model. Just try different values.
-    # As for this ~500MB model, with batch size 256: 
+    # As for this ~500MB model, with batch size 256 (A100x8 setting), I found:
     # max lr: 1e-2: loss diverges. 1e-3 : good, 1e-4 : too slow compared to 1e-3
+    # This time, with batch size 48, learning rate is scaled down by about 5x from 256 batch size setting.
     
-    max_learning_rate: float = 1e-3
-    min_learning_rate: float = 1e-4
+    max_learning_rate: float = 2e-4
+    min_learning_rate: float = 2e-5
     warmup_steps: int = 1_000
 
     # === system ===
