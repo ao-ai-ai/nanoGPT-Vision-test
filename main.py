@@ -52,6 +52,33 @@ def main():
         config=config,
         checkpoint_dir=checkpoint_dir,
     )
+    
+# 🛠️ 【修正】自動ダウンロード機能付きのロード処理
+    from huggingface_hub import hf_hub_download
+
+    resume_checkpoint_name = "checkpoint_020500.pt"  # 指定するチェックポイント名
+    resume_path = os.path.join(checkpoint_dir, resume_checkpoint_name)
+
+    # 1. ローカルにファイルが存在しない場合、Hugging Faceからダウンロードを実行
+    if not os.path.exists(resume_path):
+        print(f"[INFO] Local checkpoint not found. Downloading {resume_checkpoint_name} from Hugging Face...")
+        try:
+            # local_dirを指定することで、隠しキャッシュではなく ./checkpoints 直下に直接配置される
+            hf_hub_download(
+                repo_id=repo_id,
+                filename=resume_checkpoint_name,
+                local_dir=checkpoint_dir
+            )
+            print("[INFO] Download completed successfully.")
+        except Exception as e:
+            print(f"[WARN] Failed to download {resume_checkpoint_name}: {e}")
+
+    # 2. ファイルの存在確認（ダウンロード成功、または既にローカルに存在した場合に発火）
+    if os.path.exists(resume_path):
+        print(f"[INFO] Found checkpoint: {resume_path}. Initializing resume process...")
+        trainer.load_checkpoint(resume_path)
+    else:
+        print("[INFO] No specific checkpoint found. Starting training from scratch (step 0).")
 
     trainer.train()
 
