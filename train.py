@@ -52,6 +52,7 @@ class Trainer:
         self.tokens_per_second_list = []
         self.total_seen_tokens_list = []
         self.total_train_time_list = []
+        
 
     def save_checkpoint(self, current_step):
         checkpoint_data = {
@@ -115,62 +116,134 @@ class Trainer:
         # Return mean loss for each dataset (train, val)
         return {split: sum(values) / len(values) for split, values in losses.items()}
 
+    # def train(self):
+    #     last_eval_end_time = None
+    #     total_train_time = 0.0
+    #     # Run train_step for (total_training_steps + 1) iterations.
+    #     for step in range(self.start_step, self.config.total_training_steps + 1):
+    #         # One training step (main work done every iteration)
+    #         # update lr
+    #         self.update_learning_rate(step)
+    #         train_loss = self.train_step()
+            
+    #         if step > 0 and step % self.config.checkpoint_save_frequency == 0:
+    #           self.save_checkpoint(step)
+    #           ########## NEW ##########
+    #           repo_id = "aoUTlum/AIkenGPT-checkpoints-test"
+    #           create_repo(repo_id=repo_id, private=False, exist_ok=True)
+    #           checkpoint_filename = f"checkpoint_{step:06d}.pt"
+    #           checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_filename)
+    #           upload_file(repo_id=repo_id, path_or_fileobj=checkpoint_path, path_in_repo=checkpoint_filename)
+
+    #           os.remove(checkpoint_path)
+    #           print(f"[INFO] Deleted local temp file {checkpoint_filename} to free disk space")
+    #           ########## NEW ##########
+
+    #         # Evaluate every evaluation_frequency steps.
+    #         if step % self.config.evaluation_frequency == 0:
+    #             if last_eval_end_time is None: # step==0 and checkpoint resume
+    #                 tokens_per_second = None
+    #             else: # compute tokens/s if last_eval_end_time is available
+    #                 current_eval_start_time = time.time()
+    #                 evaluation_interval = current_eval_start_time - last_eval_end_time
+    #                 total_train_time += evaluation_interval
+    #                 tokens_per_evaluation_interval = self.config.batch_size * self.config.input_sequence_length * self.config.evaluation_frequency
+    #                 tokens_per_second = tokens_per_evaluation_interval / evaluation_interval
+
+    #             eval_loss = self.evaluate()
+    #             total_seen_tokens = self.config.batch_size * self.config.input_sequence_length * step        
+    #             current_learning_rate = self.optimizer.param_groups[0]["lr"]
+    
+
+    #             print(
+    #                 f"step {step:05d} | "
+    #                 f"lr {current_learning_rate:.6e} | "
+    #                 f"train loss {eval_loss['train']:.4f} | "
+    #                 f"val loss {eval_loss['val']:.4f} | "
+    #                 f"tok/s {int(tokens_per_second) if tokens_per_second is not None else 'None'} | "
+    #                 f"tokens {total_seen_tokens:,} | "
+    #                 f"time {total_train_time:.2f}s"
+    #             )
+
+    #             self.steps.append(step)
+    #             self.learning_rates.append(current_learning_rate)
+    #             self.train_losses.append(eval_loss['train'])
+    #             self.val_losses.append(eval_loss['val'])
+    #             self.tokens_per_second_list.append(tokens_per_second)
+    #             self.total_seen_tokens_list.append(total_seen_tokens)
+    #             self.total_train_time_list.append(total_train_time)
+
+    #             # Record when this evaluation finishes. The delta to the next evaluation start
+    #             # becomes `evaluation_interval`.
+    #             last_eval_end_time = time.time()
+
+    #     # Save the final model if training completes successfully
+    #     self.save_checkpoint(self.config.total_training_steps)
+
+  #==========NEW：lossなどの表示を毎ステップ行う。val.lossだけconfig.evaluation_frequencyステップごと（gemini）=======
     def train(self):
-        last_eval_end_time = None
         total_train_time = 0.0
         # Run train_step for (total_training_steps + 1) iterations.
         for step in range(self.start_step, self.config.total_training_steps + 1):
-            # One training step (main work done every iteration)
-            # update lr
-            self.update_learning_rate(step)
-            train_loss = self.train_step()
             
+            # --- 1. 学習と速度計測（毎ステップ） ---
+            step_start_time = time.time()
+            
+            self.update_learning_rate(step)
+            # train_step() から「そのステップの最新のtrain loss」を受け取る
+            train_loss = self.train_step() 
+            
+            step_end_time = time.time()
+            step_duration = step_end_time - step_start_time
+            total_train_time += step_duration
+
+            # --- 2. チェックポイント保存（指定間隔） ---
             if step > 0 and step % self.config.checkpoint_save_frequency == 0:
-              self.save_checkpoint(step)
-              ########## NEW ##########
-              create_repo(repo_id=self.repo_id, private=False, exist_ok=True)
-              checkpoint_filename = f"checkpoint_{step:06d}.pt"
-              checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_filename)
-              upload_file(repo_id=self.repo_id, path_or_fileobj=checkpoint_path, path_in_repo=checkpoint_path)
-              ########## NEW ##########
+                self.save_checkpoint(step)
+                ########## NEW ##########
+                repo_id = "aoUTlum/AIkenGPT-checkpoints-test"
+                create_repo(repo_id=repo_id, private=False, exist_ok=True)
+                checkpoint_filename = f"checkpoint_{step:06d}.pt"
+                checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_filename)
+                upload_file(repo_id=repo_id, path_or_fileobj=checkpoint_path, path_in_repo=checkpoint_filename)
 
-            # Evaluate every evaluation_frequency steps.
+                os.remove(checkpoint_path)
+                print(f"[INFO] Deleted local temp file {checkpoint_filename} to free disk space")
+                ########## NEW ##########
+
+            # --- 3. メトリクス計算（毎ステップ） ---
+            tokens_per_step = self.config.batch_size * self.config.input_sequence_length
+            tokens_per_second = tokens_per_step / step_duration if step_duration > 0 else 0
+            total_seen_tokens = tokens_per_step * step
+            current_learning_rate = self.optimizer.param_groups[0]["lr"]
+
+            # --- 4. 評価（指定間隔：例 100ステップごと） ---
+            val_loss_str = "" # 普段は空の文字列にしておく
             if step % self.config.evaluation_frequency == 0:
-                if last_eval_end_time is None: # step==0 and checkpoint resume
-                    tokens_per_second = None
-                else: # compute tokens/s if last_eval_end_time is available
-                    current_eval_start_time = time.time()
-                    evaluation_interval = current_eval_start_time - last_eval_end_time
-                    total_train_time += evaluation_interval
-                    tokens_per_evaluation_interval = self.config.batch_size * self.config.input_sequence_length * self.config.evaluation_frequency
-                    tokens_per_second = tokens_per_evaluation_interval / evaluation_interval
-
-                eval_loss = self.evaluate()
-                total_seen_tokens = self.config.batch_size * self.config.input_sequence_length * step        
-                current_learning_rate = self.optimizer.param_groups[0]["lr"]
-    
-
-                print(
-                    f"step {step:05d} | "
-                    f"lr {current_learning_rate:.6e} | "
-                    f"train loss {eval_loss['train']:.4f} | "
-                    f"val loss {eval_loss['val']:.4f} | "
-                    f"tok/s {int(tokens_per_second) if tokens_per_second is not None else 'None'} | "
-                    f"tokens {total_seen_tokens:,} | "
-                    f"time {total_train_time:.2f}s"
-                )
-
-                self.steps.append(step)
-                self.learning_rates.append(current_learning_rate)
-                self.train_losses.append(eval_loss['train'])
+                # 100回に1回だけ重いテストを実行
+                eval_loss = self.evaluate() 
+                # 文字列に val loss を代入する
+                val_loss_str = f"val loss {eval_loss['val']:.4f} | " 
                 self.val_losses.append(eval_loss['val'])
-                self.tokens_per_second_list.append(tokens_per_second)
-                self.total_seen_tokens_list.append(total_seen_tokens)
-                self.total_train_time_list.append(total_train_time)
 
-                # Record when this evaluation finishes. The delta to the next evaluation start
-                # becomes `evaluation_interval`.
-                last_eval_end_time = time.time()
+            # --- 5. ログ出力（毎ステップ） ---
+            print(
+                f"step {step:05d} | "
+                f"lr {current_learning_rate:.6e} | "
+                f"train loss {train_loss:.4f} | "  # 👈 毎ステップの誤差
+                f"{val_loss_str}"                  # 👈 100回に1回だけ val loss がここに現れる
+                f"tok/s {int(tokens_per_second)} | "
+                f"tokens {total_seen_tokens:,} | "
+                f"time {total_train_time:.2f}s"
+            )
+
+            # リストへの記録（グラフ描画用など）
+            self.steps.append(step)
+            self.learning_rates.append(current_learning_rate)
+            self.train_losses.append(train_loss)
+            self.tokens_per_second_list.append(tokens_per_second)
+            self.total_seen_tokens_list.append(total_seen_tokens)
+            self.total_train_time_list.append(total_train_time)
 
         # Save the final model if training completes successfully
         self.save_checkpoint(self.config.total_training_steps)
