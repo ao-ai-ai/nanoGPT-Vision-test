@@ -56,7 +56,7 @@ def main():
 # 🛠️ 【修正】自動ダウンロード機能付きのロード処理
     from huggingface_hub import hf_hub_download
 
-    resume_checkpoint_name = "checkpoint_020500.pt"  # 指定するチェックポイント名
+    resume_checkpoint_name = "checkpoint_097000.pt"  # 指定するチェックポイント名
     resume_path = os.path.join(checkpoint_dir, resume_checkpoint_name)
 
     # 1. ローカルにファイルが存在しない場合、Hugging Faceからダウンロードを実行
