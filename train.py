@@ -84,20 +84,47 @@ class Trainer:
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = learning_rate
 
-
+    #=====NEW:勾配蓄積======
     def train_step(self):
-        input_batch, target_batch = self.data_loader.get_batch('train')
+        # 設定がない場合はデフォルトで8回（バッチサイズ4 × 8 = グローバルバッチ32）
+        accumulation_steps = getattr(self.config, "gradient_accumulation_steps", 8)
+
         self.optimizer.zero_grad()
+        accumulated_loss = 0.0
 
-        ### NEW ###
-        with torch.autocast(device_type=self.config.device_type, dtype=torch.bfloat16):
-        ### NEW ###
-            logits, loss = self.model(input_batch, target_batch)
+        for _ in range(accumulation_steps):
+            input_batch, target_batch = self.data_loader.get_batch('train')
 
-        loss.backward()
+            with torch.autocast(device_type=self.config.device_type, dtype=torch.bfloat16):
+                logits, loss = self.model(input_batch, target_batch)
+
+                # 🚨【超重要】Lossを累積回数で割り算する
+                loss = loss / accumulation_steps
+
+            loss.backward()
+
+            # ログ表示用に、割り算したLossを足し合わせて元のスケールに戻す
+            accumulated_loss += loss.item()
+
+        # 累積が終わって .grad が溜まった状態で、重みを更新する
         self.optimizer.step()
 
-        return loss.item()
+        return accumulated_loss
+
+
+    # def train_step(self):
+    #     input_batch, target_batch = self.data_loader.get_batch('train')
+    #     self.optimizer.zero_grad()
+
+    #     ### NEW ###
+    #     with torch.autocast(device_type=self.config.device_type, dtype=torch.bfloat16):
+    #     ### NEW ###
+    #         logits, loss = self.model(input_batch, target_batch)
+
+    #     loss.backward()
+    #     self.optimizer.step()
+
+    #     return loss.item()
 
     def evaluate(self):
         ### NEW ###
@@ -181,18 +208,18 @@ class Trainer:
     #     self.save_checkpoint(self.config.total_training_steps)
 
   #==========NEW：lossなどの表示を毎ステップ行う。val.lossだけconfig.evaluation_frequencyステップごと（gemini）=======
+    #=====NEW:勾配蓄積用にtrain()を書き換える======
     def train(self):
         total_train_time = 0.0
         # Run train_step for (total_training_steps + 1) iterations.
         for step in range(self.start_step, self.config.total_training_steps + 1):
-            
+
             # --- 1. 学習と速度計測（毎ステップ） ---
             step_start_time = time.time()
-            
+
             self.update_learning_rate(step)
-            # train_step() から「そのステップの最新のtrain loss」を受け取る
-            train_loss = self.train_step() 
-            
+            train_loss = self.train_step()
+
             step_end_time = time.time()
             step_duration = step_end_time - step_start_time
             total_train_time += step_duration
@@ -212,32 +239,34 @@ class Trainer:
                 ########## NEW ##########
 
             # --- 3. メトリクス計算（毎ステップ） ---
-            tokens_per_step = self.config.batch_size * self.config.input_sequence_length
+            # 👇 変更：勾配累積分のトークン数を計算に含める
+            accumulation_steps = getattr(self.config, "gradient_accumulation_steps", 8)
+            global_batch_size = self.config.batch_size * accumulation_steps
+
+            tokens_per_step = global_batch_size * self.config.input_sequence_length
             tokens_per_second = tokens_per_step / step_duration if step_duration > 0 else 0
             total_seen_tokens = tokens_per_step * step
             current_learning_rate = self.optimizer.param_groups[0]["lr"]
 
             # --- 4. 評価（指定間隔：例 100ステップごと） ---
-            val_loss_str = "" # 普段は空の文字列にしておく
+            val_loss_str = ""
             if step % self.config.evaluation_frequency == 0:
-                # 100回に1回だけ重いテストを実行
-                eval_loss = self.evaluate() 
-                # 文字列に val loss を代入する
-                val_loss_str = f"val loss {eval_loss['val']:.4f} | " 
+                eval_loss = self.evaluate()
+                val_loss_str = f"val loss {eval_loss['val']:.4f} | "
                 self.val_losses.append(eval_loss['val'])
 
             # --- 5. ログ出力（毎ステップ） ---
             print(
                 f"step {step:05d} | "
                 f"lr {current_learning_rate:.6e} | "
-                f"train loss {train_loss:.4f} | "  # 👈 毎ステップの誤差
-                f"{val_loss_str}"                  # 👈 100回に1回だけ val loss がここに現れる
+                f"train loss {train_loss:.4f} | "
+                f"{val_loss_str}"
                 f"tok/s {int(tokens_per_second)} | "
                 f"tokens {total_seen_tokens:,} | "
                 f"time {total_train_time:.2f}s"
             )
 
-            # リストへの記録（グラフ描画用など）
+            # リストへの記録
             self.steps.append(step)
             self.learning_rates.append(current_learning_rate)
             self.train_losses.append(train_loss)
@@ -247,3 +276,71 @@ class Trainer:
 
         # Save the final model if training completes successfully
         self.save_checkpoint(self.config.total_training_steps)
+
+
+    # def train(self):
+    #     total_train_time = 0.0
+    #     # Run train_step for (total_training_steps + 1) iterations.
+    #     for step in range(self.start_step, self.config.total_training_steps + 1):
+            
+    #         # --- 1. 学習と速度計測（毎ステップ） ---
+    #         step_start_time = time.time()
+            
+    #         self.update_learning_rate(step)
+    #         # train_step() から「そのステップの最新のtrain loss」を受け取る
+    #         train_loss = self.train_step() 
+            
+    #         step_end_time = time.time()
+    #         step_duration = step_end_time - step_start_time
+    #         total_train_time += step_duration
+
+    #         # --- 2. チェックポイント保存（指定間隔） ---
+    #         if step > 0 and step % self.config.checkpoint_save_frequency == 0:
+    #             self.save_checkpoint(step)
+    #             ########## NEW ##########
+    #             repo_id = "aoUTlum/AIkenGPT-checkpoints-test"
+    #             create_repo(repo_id=repo_id, private=False, exist_ok=True)
+    #             checkpoint_filename = f"checkpoint_{step:06d}.pt"
+    #             checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_filename)
+    #             upload_file(repo_id=repo_id, path_or_fileobj=checkpoint_path, path_in_repo=checkpoint_filename)
+
+    #             os.remove(checkpoint_path)
+    #             print(f"[INFO] Deleted local temp file {checkpoint_filename} to free disk space")
+    #             ########## NEW ##########
+
+    #         # --- 3. メトリクス計算（毎ステップ） ---
+    #         tokens_per_step = self.config.batch_size * self.config.input_sequence_length
+    #         tokens_per_second = tokens_per_step / step_duration if step_duration > 0 else 0
+    #         total_seen_tokens = tokens_per_step * step
+    #         current_learning_rate = self.optimizer.param_groups[0]["lr"]
+
+    #         # --- 4. 評価（指定間隔：例 100ステップごと） ---
+    #         val_loss_str = "" # 普段は空の文字列にしておく
+    #         if step % self.config.evaluation_frequency == 0:
+    #             # 100回に1回だけ重いテストを実行
+    #             eval_loss = self.evaluate() 
+    #             # 文字列に val loss を代入する
+    #             val_loss_str = f"val loss {eval_loss['val']:.4f} | " 
+    #             self.val_losses.append(eval_loss['val'])
+
+    #         # --- 5. ログ出力（毎ステップ） ---
+    #         print(
+    #             f"step {step:05d} | "
+    #             f"lr {current_learning_rate:.6e} | "
+    #             f"train loss {train_loss:.4f} | "  # 👈 毎ステップの誤差
+    #             f"{val_loss_str}"                  # 👈 100回に1回だけ val loss がここに現れる
+    #             f"tok/s {int(tokens_per_second)} | "
+    #             f"tokens {total_seen_tokens:,} | "
+    #             f"time {total_train_time:.2f}s"
+    #         )
+
+    #         # リストへの記録（グラフ描画用など）
+    #         self.steps.append(step)
+    #         self.learning_rates.append(current_learning_rate)
+    #         self.train_losses.append(train_loss)
+    #         self.tokens_per_second_list.append(tokens_per_second)
+    #         self.total_seen_tokens_list.append(total_seen_tokens)
+    #         self.total_train_time_list.append(total_train_time)
+
+    #     # Save the final model if training completes successfully
+    #     self.save_checkpoint(self.config.total_training_steps)
