@@ -5,7 +5,8 @@ from dataclasses import dataclass
 class ModelConfig:
     # === training ===
     # Single-device setup: global batch size == batch_size
-    batch_size: int = 48 # 16 is equivalent to about 25 GB VRAM usage. 
+    batch_size: int = 4 # 16 is equivalent to about 25 GB VRAM usage. 
+    gradient_accumulation_steps: int = 12
     total_training_steps: int = 200_000
     evaluation_frequency: int = 100
     checkpoint_save_frequency: int = 10_000
