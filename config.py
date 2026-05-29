@@ -12,16 +12,17 @@ class ModelConfig:
     evaluation_loops: int = 10
 
     # === sequence ===
-    input_sequence_length: int = 1024
+    input_sequence_length: int = 2048
     max_sequence_length: int = 2048
 
     # === model ===
-    embedding_dim: int = 1280 # 384
-    hidden_dim: int = 5120 # 1536
+    embedding_dim: int = 2560 # 384
+    hidden_dim: int = 10240 # 1536
     num_attention_heads: int = 10 # 6
-    layer_count: int = 20
+    layer_count: int = 30
     rope_theta: float = 1_000_000.0
     vocab_size: int = 50257
+
 
     # === optimization ===
     # The learning rate is VERY important. You can tune it, but that takes time, money, and a bit of your sanity.
